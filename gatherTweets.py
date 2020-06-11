@@ -13,6 +13,10 @@ import sys
 import pandas as pd
 import emoji
 import re
+import nltk
+#import TextBlob
+import textblob
+from textblob import TextBlob
 
 
 # Define credentials
@@ -32,7 +36,7 @@ api = tweepy.API(auth)
 
 # Set list of handles for extraction
 #popularUsers = ["BarackObama", "POTUS"]
-popularUsers = ["BarackObama", "justinbieber", "katyperry", "taylorswift13", "POTUS", "ladygaga", "TheEllenShow", "ArianaGrande", "KimKardashian", "jtimberlake"]
+popularUsers = ["justinbieber", "katyperry", "taylorswift13", "ladygaga", "TheEllenShow", "ArianaGrande", "KimKardashian", "jtimberlake", "rihanna", "RealChalamet"]
 
 # Set user from command line
 #username = sys.argv[1]
@@ -79,6 +83,13 @@ for username in popularUsers:
                 #if any(s in tweet.text.lower() for s in searchWords):
                     tweets.append(tweet)
 
+
+    # NOT YET IMPLEMENTED
+    # Prepare NRC files for use
+    #filepath = "NRC-Emotion-Lexicon-v0.92/NRC-emotion-lexicon-wordlevel-alphabetized-v0.92.txt"
+    #emolex_df = pd.read_csv(filepath,  names=["word", "emotion", "association"], skiprows=45, sep='\t')
+
+
     # Write to excel file
     workbook = xlsxwriter.Workbook("/Users/katiemendel 1/Desktop/collected-twitter-data/excel/" + username + ".xlsx")
     worksheet = workbook.add_worksheet()
@@ -92,43 +103,66 @@ for username in popularUsers:
     worksheet.write_string(row, 4, "in_reply_to_status_id")
     worksheet.write_string(row, 5, "retweet_count")
     worksheet.write_string(row, 6, "favorite_count")
-    worksheet.write(row, 7, "class")
+    worksheet.write(row, 7, "interaction")
+    worksheet.write(row, 8, "sentiment")
+    worksheet.write(row, 9, "polarity")
+    worksheet.write(row, 10, "subjectivity")
+    worksheet.write(row, 11, "class")
 
     row += 1
 
     for tweet in tweets:
-        worksheet.write_string(row, 0, str(tweet.id))
-        worksheet.write_string(row, 1, str(tweet.created_at))
-        # Write full text of tweet
+
+        # Check if tweet is a retweet and fetch full text
         if (tweet.full_text.startswith("RT @")):
             text = tweet.retweeted_status.full_text
-            worksheet.write(row, 3, "True")
+            retweet = True
             favorites = tweet.retweeted_status.favorite_count
+            mention = True
         else:
             text = tweet.full_text
-            worksheet.write(row, 3, "None")
+            retweet = False
             favorites = tweet.favorite_count
-        
+            if('@' in text):
+                mention = True
+            else:
+                mention = False
+
+
         # Replace special characters
         text = emoji.demojize(text)
+        text = re.sub("tears_of_joy", "laughing", text)
+        text = re.sub("sign_of_the_horns", "rock_on", text)
+        text = re.sub(r"http\S+", "", text)
         text = re.sub("\n", " ", text)
         text = re.sub("'", "\\\'", text)
         text = re.sub("’", "\\\'", text)
         text = re.sub("\"", "", text)
         text = re.sub(":", " ", text)
-
-        worksheet.write(row, 2, "'" + text + "'")
-        worksheet.write_string(row, 4, str(tweet.in_reply_to_status_id))
-        worksheet.write_string(row, 5, str(tweet.retweet_count))
-        worksheet.write_string(row, 6, str(favorites))
-        worksheet.write(row, 7, "?")
-        row += 1
+        text = re.sub("_", " ", text)
+        
+        if(text != ""):
+            worksheet.write_string(row, 0, str(tweet.id))
+            worksheet.write_string(row, 1, str(tweet.created_at))
+            worksheet.write(row, 2, "'" + text.lower() + "'")
+            worksheet.write(row, 3, str(retweet))
+            worksheet.write_string(row, 4, str(tweet.in_reply_to_status_id))
+            worksheet.write_string(row, 5, str(tweet.retweet_count))
+            worksheet.write_string(row, 6, str(favorites))
+            worksheet.write(row, 7, str(mention))
+            if(TextBlob(text).sentiment.polarity > 0):
+                worksheet.write(row, 8, "pos")
+            else:
+                worksheet.write(row, 8, "neg")
+            worksheet.write(row, 9, str(TextBlob(text).sentiment.polarity))
+            worksheet.write(row, 10, str(TextBlob(text).sentiment.subjectivity))
+            worksheet.write(row, 11, "?")
+            row += 1
 
     workbook.close()
 
     # Prepare for file format conversions
     csvFileName = "/Users/katiemendel 1/Desktop/collected-twitter-data/csv/" + username + ".csv"
-    arffFileName = "/Users/katiemendel 1/Desktop/collected-twitter-data/arff/" + username + ".arff"
 
     # Convert from XLSX to CSV format
     read_file = pd.read_excel("/Users/katiemendel 1/Desktop/collected-twitter-data/excel/" + username + ".xlsx")
